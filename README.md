@@ -1,3 +1,4 @@
+# 🤖 Quantifriends
 
 ESP32-C3 SuperMini tabanlı, kendi Wi-Fi ağını (AP) yayan, dahili web arayüzüne sahip ve tek bir dokunmatik sensörle kontrol edilebilen **Sanal Masaüstü Evcil Hayvanı ve Retro Oyun Konsolu**.
 

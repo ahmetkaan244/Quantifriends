@@ -3,7 +3,16 @@
 ESP32-C3 SuperMini tabanlı, kendi Wi-Fi ağını (AP) yayan, dahili web arayüzüne sahip ve tek bir dokunmatik sensörle kontrol edilebilen **Sanal Masaüstü Evcil Hayvanı ve Retro Oyun Konsolu**.
 
 Bu proje, engellemesiz (non-blocking) C++ mimarisi ve yüksek hızlı I2C (400kHz) iletişimi sayesinde OLED ekran üzerinde gecikmesiz (Zero-Lag) ve akıcı bir deneyim sunar.
-
+<p align="center">
+  <a href="https://ahmetkaan244.github.io/Quantifriends/onizleme.html">
+    <img src="https://img.shields.io/badge/🚀_LIVE_DEMO-Launch_Quantifriends-00C853?style=for-the-badge" alt="Animasyonlar Burada!">
+  </a>
+</p>
+<p align="center">
+  <a href="https://ahmetkaan244.github.io/Quantifriends/oyun-onizleme.html">
+    <img src="https://img.shields.io/badge/🚀_LIVE_DEMO-Launch_Quantifriends-00C853?style=for-the-badge" alt="İçinde Bulunan Oyunlar Burada!">
+  </a>
+</p>
 ---
 
 ## ✨ Öne Çıkan Özellikler

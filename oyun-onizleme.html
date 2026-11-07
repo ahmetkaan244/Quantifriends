@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quantifriends • Oyun Önizleme</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family:"Segoe UI",Roboto,Arial,sans-serif;
+    background:radial-gradient(circle at 50% 0%, #1e293b, #0b1120 60%, #05070d);
+    color:#e2e8f0; min-height:100vh; padding:26px 14px 50px;
+  }
+  h1 { text-align:center; font-size:1.5rem; letter-spacing:4px; color:#7dd3fc; }
+  .sub { text-align:center; font-size:.75rem; color:#64748b; margin:6px 0 22px; letter-spacing:1px; }
+  .wrap { max-width:1000px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:18px; }
+  .card { background:rgba(255,255,255,.05); border:1px solid rgba(125,211,252,.18); border-radius:18px; padding:14px; }
+  .card h2 { font-size:.8rem; letter-spacing:1.5px; color:#bae6fd; margin-bottom:4px; }
+  .card p { font-size:.68rem; color:#64748b; margin-bottom:10px; min-height:2em; }
+  canvas { width:100%; aspect-ratio:2/1; image-rendering:pixelated; border-radius:8px; background:#0a0c14; box-shadow:inset 0 0 20px rgba(125,211,252,.12); }
+  .hint { text-align:center; font-size:.65rem; color:#475569; margin-top:8px; }
+</style>
+</head>
+<body>
+<h1>Quantifriends</h1>
+<div class="sub">6 retro oyun • tek buton • 128×64 OLED</div>
+<div class="wrap" id="wrap"></div>
+<div class="hint">Her oyun kendi kendine oynuyor (otomatik dokunuş simülasyonu).</div>
+
+<script>
+const W = 128, H = 64;
+let buf = new Uint8Array(W * H);
+const px = (x,y,c=1)=>{ x=Math.round(x); y=Math.round(y); if(x<0||y<0||x>=W||y>=H) return; buf[y*W+x]=c?1:0; };
+const hline=(x,y,w,c=1)=>{ for(let i=0;i<w;i++) px(x+i,y,c); };
+const vline=(x,y,h,c=1)=>{ for(let i=0;i<h;i++) px(x,y+i,c); };
+const line=(x0,y0,x1,y1,c=1)=>{ x0=Math.round(x0);y0=Math.round(y0);x1=Math.round(x1);y1=Math.round(y1);
+  let dx=Math.abs(x1-x0), dy=-Math.abs(y1-y0), sx=x0<x1?1:-1, sy=y0<y1?1:-1, err=dx+dy;
+  for(;;){ px(x0,y0,c); if(x0===x1&&y0===y1) break; const e2=2*err;
+    if(e2>=dy){err+=dy;x0+=sx;} if(e2<=dx){err+=dx;y0+=sy;} } };
+const rect=(x,y,w,h,c=1)=>{ hline(x,y,w,c); hline(x,y+h-1,w,c); vline(x,y,h,c); vline(x+w-1,y,h,c); };
+const fillRect=(x,y,w,h,c=1)=>{ for(let j=0;j<h;j++) hline(x,y+j,w,c); };
+const circle=(x0,y0,r,c=1)=>{ let f=1-r,ddx=1,ddy=-2*r,x=0,y=r;
+  px(x0,y0+r,c);px(x0,y0-r,c);px(x0+r,y0,c);px(x0-r,y0,c);
+  while(x<y){ if(f>=0){y--;ddy+=2;f+=ddy;} x++;ddx+=2;f+=ddx;
+    px(x0+x,y0+y,c);px(x0-x,y0+y,c);px(x0+x,y0-y,c);px(x0-x,y0-y,c);
+    px(x0+y,y0+x,c);px(x0-y,y0+x,c);px(x0+y,y0-x,c);px(x0-y,y0-x,c);} };
+const fillCircle=(x0,y0,r,c=1)=>{ vline(x0,y0-r,2*r+1,c); let f=1-r,ddy=-2*r,x=0,y=r;
+  while(x<y){ if(f>=0){y--;ddy+=2;f+=ddy;} x++; f+=2*x+1;
+    vline(x0+x,y0-y,2*y+1,c); vline(x0-x,y0-y,2*y+1,c);
+    vline(x0+y,y0-x,2*x+1,c); vline(x0-y,y0-x,2*x+1,c);} };
+const fillTriangle=(x0,y0,x1,y1,x2,y2,c=1)=>{
+  const mnx=Math.min(x0,x1,x2),mxx=Math.max(x0,x1,x2),mny=Math.min(y0,y1,y2),mxy=Math.max(y0,y1,y2);
+  const e=(ax,ay,bx,by,p,q)=>(p-ax)*(by-ay)-(q-ay)*(bx-ax);
+  for(let y=mny;y<=mxy;y++) for(let x=mnx;x<=mxx;x++){
+    const w0=e(x1,y1,x2,y2,x,y),w1=e(x2,y2,x0,y0,x,y),w2=e(x0,y0,x1,y1,x,y);
+    if((w0>=0&&w1>=0&&w2>=0)||(w0<=0&&w1<=0&&w2<=0)) px(x,y,c);} };
+
+// metin (5x7)
+const FONT = {
+ 'A':[14,17,17,31,17,17,17],'B':[30,17,17,30,17,17,30],'C':[14,17,16,16,16,17,14],
+ 'D':[28,18,17,17,17,18,28],'E':[31,16,16,30,16,16,31],'F':[31,16,16,30,16,16,16],
+ 'G':[14,17,16,23,17,17,15],'H':[17,17,17,31,17,17,17],'I':[14,4,4,4,4,4,14],
+ 'J':[7,2,2,2,2,18,12],'K':[17,18,20,24,20,18,17],'L':[16,16,16,16,16,16,31],
+ 'M':[17,27,21,21,17,17,17],'N':[17,25,21,19,17,17,17],'O':[14,17,17,17,17,17,14],
+ 'P':[30,17,17,30,16,16,16],'Q':[14,17,17,17,21,18,13],'R':[30,17,17,30,20,18,17],
+ 'S':[15,16,16,14,1,1,30],'T':[31,4,4,4,4,4,4],'U':[17,17,17,17,17,17,14],
+ 'V':[17,17,17,17,17,10,4],'W':[17,17,17,21,21,27,17],'X':[17,17,10,4,10,17,17],
+ 'Y':[17,17,10,4,4,4,4],'Z':[31,1,2,4,8,16,31],
+ '0':[14,17,19,21,25,17,14],'1':[4,12,4,4,4,4,14],'2':[14,17,1,2,4,8,31],
+ '3':[31,2,4,2,1,17,14],'4':[2,6,10,18,31,2,2],'5':[31,16,30,1,1,17,14],
+ '6':[6,8,16,30,17,17,14],'7':[31,1,2,4,8,8,8],'8':[14,17,17,14,17,17,14],
+ '9':[14,17,17,15,1,2,12],' ':[0,0,0,0,0,0,0],'.':[0,0,0,0,0,12,12],
+ ':':[0,12,12,0,12,12,0],'-':[0,0,0,31,0,0,0],'/':[1,2,2,4,8,8,16],'!':[4,4,4,4,4,0,4]
+};
+function text(x,y,str,size=1){
+  for(const ch of str.toUpperCase()){
+    const g=FONT[ch];
+    if(g) for(let r=0;r<7;r++) for(let c=0;c<5;c++)
+      if(g[r]&(1<<(4-c))) fillRect(x+c*size,y+r*size,size,size,1);
+    x += 6*size;
+  }
+}
+
+// ============================================================
+//  OYUNLAR (tek buton mantığı, JS portu)
+// ============================================================
+const games = {};
+
+// --- Dino ---
+games.dino = (() => {
+  let y=40, hiz=0, zemin=46, ex=128, eboy=10, puan=0, t=0, son=0;
+  function reset(){ y=40;hiz=0;ex=128;eboy=10;puan=0; }
+  return {
+    ad:'Dino Koşu', aciklama:'Dokun: zıpla, kaktüse çarpma',
+    step(ms, tap){
+      if (ms-son < 40) return; son=ms; t++;
+      if (tap && y>=zemin) hiz=-8;
+      hiz+=0.9; y+=hiz;
+      if(y>=zemin){y=zemin;hiz=0;}
+      ex-=3; if(ex<-8){ex=128;eboy=8+Math.floor(Math.random()*8);puan++;}
+      if(ex<22 && ex+8>12 && y>zemin-10) reset();
+    },
+    draw(){
+      hline(0,56,128,1);
+      fillRect(12,y,10,10,1); fillRect(22,y+2,3,3,1);
+      fillRect(ex,40,8,eboy,1);
+      text(104,0,''+puan);
+    }
+  };
+})();
+
+// --- Flappy ---
+games.flappy = (() => {
+  let y=32,hiz=0,bx=128,bos=24,puan=0,t=0,son=0;
+  function reset(){y=32;hiz=0;bx=128;bos=24;puan=0;}
+  return {
+    ad:'Flappy Kuş', aciklama:'Dokun: kanat çırp, borulara çarpma',
+    step(ms, tap){
+      if (ms-son<40) return; son=ms; t++;
+      if (tap) hiz=-4.2;
+      hiz+=0.75; y+=hiz;
+      if(y<0){y=0;hiz=0;}
+      if(y>56) return reset();
+      bx-=2; if(bx<-14){bx=128;bos=16+Math.floor(Math.random()*28);puan++;}
+      if(bx<26 && bx+12>14 && (y<bos || y+6>bos+18)) reset();
+    },
+    draw(){
+      fillRect(bx,0,12,bos,1); fillRect(bx,bos+18,12,64,1);
+      fillRect(14,y,7,6,1);
+      text(104,0,''+puan);
+    }
+  };
+})();
+
+// --- Yılan ---
+games.yilan = (() => {
+  let sn=[], yon=0, yem={x:5,y:3}, puan=0, son=0, tick=0;
+  function reset(){ sn=[{x:10,y:5},{x:7,y:5},{x:4,y:5},{x:1,y:5}]; yon=0; puan=0; yem={x:5+Math.floor(Math.random()*20),y:Math.floor(Math.random()*7)}; }
+  reset();
+  return {
+    ad:'Yılan', aciklama:'Dokun: 90° saat yönünde dön',
+    step(ms, tap){
+      if (tap) yon=(yon+1)%4;
+      if (ms-son<110) return; son=ms; tick++;
+      const d=[[1,0],[0,1],[-1,0],[0,-1]][yon];
+      const yeni={x:sn[0].x+d[0], y:sn[0].y+d[1]};
+      if(yeni.x<0||yeni.x>=32||yeni.y<0||yeni.y>=7||sn.some(s=>s.x===yeni.x&&s.y===yeni.y)) return reset();
+      sn.unshift(yeni);
+      if(yeni.x===yem.x&&yeni.y===yem.y){ puan++; yem={x:Math.floor(Math.random()*32),y:Math.floor(Math.random()*7)}; }
+      else sn.pop();
+    },
+    draw(){
+      fillRect(yem.x*4, 8+yem.y*8, 4,7,1);
+      sn.forEach((s,i)=> i===0? fillRect(s.x*4,8+s.y*8,4,7,1) : rect(s.x*4,8+s.y*8,3,6,1));
+      text(0,0,'SKOR '+puan);
+    }
+  };
+})();
+
+// --- Pong ---
+games.pong = (() => {
+  let tx=64,ty=32,vx=2.2,vy=1.4,ry=26,rd=1,ay=26,puan=0,son=0;
+  function reset(){tx=64;ty=32;vx=2.2;vy=1.4;ry=26;rd=1;ay=26;}
+  return {
+    ad:'Pong', aciklama:'Dokun: raket yönünü tersine çevir',
+    step(ms, tap){
+      if (tap) rd=-rd;
+      if (ms-son<40) return; son=ms;
+      tx+=vx; ty+=vy;
+      if(ty<8){ty=8;vy=-vy;} if(ty>60){ty=60;vy=-vy;}
+      ry+=rd*3; if(ry<8){ry=8;rd=1;} if(ry>52){ry=52;rd=-1;}
+      if(ay+5<ty) ay+=2; else if(ay+5>ty) ay-=2;
+      ay=Math.max(8,Math.min(52,ay));
+      if(tx>112&&tx<120&&ty>ry-3&&ty<ry+14){tx=112;vx=-Math.abs(vx)-0.05;vy+=(ty-(ry+5))*0.12;puan++;}
+      if(tx<12&&tx>4&&ty>ay-3&&ty<ay+14){tx=12;vx=Math.abs(vx)+0.05;}
+      if(tx<0||tx>128) reset();
+    },
+    draw(){
+      vline(63,8,56,1);
+      fillRect(4,ay,4,12,1); fillRect(120,ry,4,12,1);
+      fillRect(tx,ty,3,3,1);
+      text(58,0,''+puan);
+    }
+  };
+})();
+
+// --- Breakout ---
+games.breakout = (() => {
+  const SR=3, KC=8;
+  let tg=[], tx=64,ty=50,vx=1.6,vy=-2, rx=52, rd=1, puan=0, son=0;
+  function reset(){ tg=Array.from({length:SR},()=>Array(KC).fill(true)); tx=64;ty=50;vx=1.6;vy=-2;rx=52;rd=1;puan=0; }
+  reset();
+  return {
+    ad:'Breakout', aciklama:'Dokun: raket yönünü değiştir, tuğlaları kır',
+    step(ms, tap){
+      if (tap) rd=-rd;
+      if (ms-son<40) return; son=ms;
+      tx+=vx; ty+=vy;
+      if(tx<2){tx=2;vx=-vx;} if(tx>125){tx=125;vx=-vx;}
+      if(ty<10){ty=10;vy=-vy;}
+      rx+=rd*2; if(rx<2){rx=2;rd=1;} if(rx>106){rx=106;rd=-1;}
+      if(ty>52&&ty<58&&tx>rx-2&&tx<rx+22){ty=52;vy=-Math.abs(vy);vx+=(tx-(rx+10))*0.08;}
+      for(let r=0;r<SR;r++) for(let c=0;c<KC;c++){
+        if(!tg[r][c]) continue;
+        const bx=c*15+3, by=r*6+12;
+        if(tx>bx-2&&tx<bx+15&&ty>by-2&&ty<by+7){tg[r][c]=false;vy=-vy;puan+=10;}
+      }
+      if(ty>62||!tg.some(row=>row.some(v=>v))) reset();
+    },
+    draw(){
+      for(let r=0;r<SR;r++) for(let c=0;c<KC;c++) if(tg[r][c]) rect(c*15+3,r*6+12,14,5,1);
+      fillRect(rx,58,20,3,1);
+      fillCircle(tx,ty,2,1);
+      text(104,0,''+puan);
+    }
+  };
+})();
+
+// --- Stacker ---
+games.stacker = (() => {
+  const MAX=8;
+  let bx=[], gw=[], sev=1, hx=0, hd=1, puan=0, son=0, ilk=true;
+  function reset(){ bx=Array(MAX).fill(44); gw=Array(MAX).fill(40); sev=0; hx=0; hd=1; puan=0; ilk=true; }
+  reset();
+  return {
+    ad:'Stacker', aciklama:'Dokun: bloğu bırak, üst üste diz',
+    step(ms, tap){
+      if (ms-son<40) return; son=ms;
+      if (tap){
+        if (sev===0){ sev=1; hx=0; hd=1; return; }
+        const ust=sev-1;
+        const sol=Math.max(hx,bx[ust]);
+        const sag=Math.min(hx+gw[sev], bx[ust]+gw[ust]);
+        const yeni=sag-sol;
+        if(yeni<=2){ reset(); return; }
+        bx[sev]=sol; gw[sev]=yeni; puan=sev;
+        if(sev<MAX-1){ sev++; gw[sev]=yeni; hx=0; hd=1; } else reset();
+      }
+      if (sev===0) return;
+      hx+=hd*3;
+      if(hx<0){hx=0;hd=1;}
+      if(hx>128-gw[sev]){hx=128-gw[sev];hd=-1;}
+    },
+    draw(){
+      for(let i=1;i<=sev;i++){ const y=58-(i-1)*6; fillRect(bx[i-1],y,gw[i-1],5,1); }
+      if(sev<MAX){ const y=58-sev*6; fillRect(hx,y,gw[sev],5,1); }
+      text(0,0,'KAT '+puan);
+    }
+  };
+})();
+
+// ============================================================
+//  Kartları oluştur + çalıştır
+// ============================================================
+const wrap = document.getElementById('wrap');
+const cards = [];
+for (const [k, g] of Object.entries(games)) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  const h2 = document.createElement('h2'); h2.textContent = g.ad;
+  const p = document.createElement('p'); p.textContent = g.aciklama;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  card.append(h2, p, cv);
+  wrap.appendChild(card);
+  cards.push({ g, ctx, img, t: 0 });
+}
+
+function loop(ms) {
+  for (const c of cards) {
+    c.t++;
+    // otomatik dokunuş: her oyunda ~1.1 sn'de bir
+    const tap = (c.t % 68) === 0;
+    c.g.step(ms, tap);
+    buf.fill(0);
+    c.g.draw();
+    const d = c.img.data;
+    for (let i = 0; i < W * H; i++) {
+      const on = buf[i];
+      d[i*4]   = on ? 0xE8 : 0x0A;
+      d[i*4+1] = on ? 0xF5 : 0x0C;
+      d[i*4+2] = on ? 0xFF : 0x14;
+      d[i*4+3] = 255;
+    }
+    c.ctx.putImageData(c.img, 0, 0);
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

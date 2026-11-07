@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quantifriends • 71 Animasyon</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: radial-gradient(circle at 50% 0%, #1e293b 0%, #0b1120 60%, #05070d 100%);
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 28px 16px 48px;
+  }
+  header { text-align: center; margin-bottom: 26px; }
+  h1 { font-size: 1.6rem; letter-spacing: 3px; text-transform: uppercase; color: #7dd3fc; }
+  .sub { font-size: .8rem; letter-spacing: 1px; color: #64748b; margin-top: 6px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 16px;
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  .card {
+    background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+    border: 1px solid rgba(125,211,252,.18);
+    border-radius: 18px;
+    padding: 12px;
+    text-align: center;
+    transition: .2s;
+  }
+  .card:hover { border-color: rgba(125,211,252,.55); transform: translateY(-3px); box-shadow: 0 12px 30px rgba(0,0,0,.5); }
+  canvas {
+    width: 100%;
+    max-width: 256px;
+    aspect-ratio: 2 / 1;
+    image-rendering: pixelated;
+    border-radius: 10px;
+    background: #0a0c14;
+    box-shadow: inset 0 0 24px rgba(125,211,252,.14);
+  }
+  .name { margin-top: 9px; font-size: .8rem; font-weight: 700; letter-spacing: .5px; color: #bae6fd; }
+  .desc { font-size: .68rem; color: #64748b; margin-top: 3px; line-height: 1.3; min-height: 2.4em; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Quantifriends</h1>
+  <div class="sub">25 temel yüz + 45 dokunuş tepkisi + dil = 71 animasyon • OLED 128×64</div>
+</header>
+<div class="grid" id="grid"></div>
+
+<script>
+// ============================================================
+//  Adafruit_GFX / SSD1306 taklidi (128x64, 1-bit)
+// ============================================================
+const W = 128, H = 64;
+let buf = new Uint8Array(W * H);
+
+const px = (x, y, c = 1) => {
+  x = Math.round(x); y = Math.round(y);
+  if (x < 0 || y < 0 || x >= W || y >= H) return;
+  buf[y * W + x] = c ? 1 : 0;
+};
+const hline = (x, y, w, c = 1) => { for (let i = 0; i < w; i++) px(x + i, y, c); };
+const vline = (x, y, h, c = 1) => { for (let i = 0; i < h; i++) px(x, y + i, c); };
+const line = (x0, y0, x1, y1, c = 1) => {
+  x0 = Math.round(x0); y0 = Math.round(y0); x1 = Math.round(x1); y1 = Math.round(y1);
+  let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+  let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy;
+  for (;;) {
+    px(x0, y0, c);
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x0 += sx; }
+    if (e2 <= dx) { err += dx; y0 += sy; }
+  }
+};
+const rect = (x, y, w, h, c = 1) => { hline(x, y, w, c); hline(x, y + h - 1, w, c); vline(x, y, h, c); vline(x + w - 1, y, h, c); };
+const fillRect = (x, y, w, h, c = 1) => { for (let j = 0; j < h; j++) hline(x, y + j, w, c); };
+const circle = (x0, y0, r, c = 1) => {
+  let f = 1 - r, ddx = 1, ddy = -2 * r, x = 0, y = r;
+  px(x0, y0 + r, c); px(x0, y0 - r, c); px(x0 + r, y0, c); px(x0 - r, y0, c);
+  while (x < y) {
+    if (f >= 0) { y--; ddy += 2; f += ddy; }
+    x++; ddx += 2; f += ddx;
+    px(x0 + x, y0 + y, c); px(x0 - x, y0 + y, c);
+    px(x0 + x, y0 - y, c); px(x0 - x, y0 - y, c);
+    px(x0 + y, y0 + x, c); px(x0 - y, y0 + x, c);
+    px(x0 + y, y0 - x, c); px(x0 - y, y0 - x, c);
+  }
+};
+const fillCircle = (x0, y0, r, c = 1) => {
+  vline(x0, y0 - r, 2 * r + 1, c);
+  let f = 1 - r, ddy = -2 * r, x = 0, y = r;
+  while (x < y) {
+    if (f >= 0) { y--; ddy += 2; f += ddy; }
+    x++; f += 2 * x + 1;
+    vline(x0 + x, y0 - y, 2 * y + 1, c); vline(x0 - x, y0 - y, 2 * y + 1, c);
+    vline(x0 + y, y0 - x, 2 * x + 1, c); vline(x0 - y, y0 - x, 2 * x + 1, c);
+  }
+};
+const fillTriangle = (x0, y0, x1, y1, x2, y2, c = 1) => {
+  const minx = Math.min(x0, x1, x2), maxx = Math.max(x0, x1, x2);
+  const miny = Math.min(y0, y1, y2), maxy = Math.max(y0, y1, y2);
+  const e = (ax, ay, bx, by, p, q) => (p - ax) * (by - ay) - (q - ay) * (bx - ax);
+  for (let y = miny; y <= maxy; y++)
+    for (let x = minx; x <= maxx; x++) {
+      const w0 = e(x1, y1, x2, y2, x, y), w1 = e(x2, y2, x0, y0, x, y), w2 = e(x0, y0, x1, y1, x, y);
+      if ((w0 >= 0 && w1 >= 0 && w2 >= 0) || (w0 <= 0 && w1 <= 0 && w2 <= 0)) px(x, y, c);
+    }
+};
+
+// ============================================================
+//  Yardımcı çizimler (MiniRobot.ino ile aynı)
+// ============================================================
+const EYE_LX = 42, EYE_RX = 86, EYE_Y = 28, EYE_R = 10;
+const D2R = Math.PI / 180;
+
+function drawArc(cx, cy, r, a0, a1) {
+  for (let a = a0; a <= a1; a += 3) {
+    px(cx + Math.cos(a * D2R) * r, cy + Math.sin(a * D2R) * r, 1);
+  }
+}
+function drawArcThick(cx, cy, r, a0, a1) { drawArc(cx, cy, r, a0, a1); drawArc(cx, cy, r - 1, a0, a1); }
+function drawLashes(cx, cy, r) {
+  line(cx - 6, cy - r + 1, cx - 8, cy - r - 3, 1);
+  line(cx,     cy - r,     cx,     cy - r - 4, 1);
+  line(cx + 6, cy - r + 1, cx + 8, cy - r - 3, 1);
+}
+function drawEyeOpen(cx, cy, pupil = true) {
+  fillCircle(cx, cy, EYE_R, 1);
+  if (pupil) fillCircle(cx - 3, cy - 3, 3, 0);
+  drawLashes(cx, cy, EYE_R);
+}
+function drawEyeClosed(cx, cy) {
+  drawArcThick(cx, cy, 8, 200, 340);
+  line(cx - 6, cy + 6, cx - 8, cy + 9, 1);
+  line(cx,     cy + 8, cx,     cy + 11, 1);
+  line(cx + 6, cy + 6, cx + 8, cy + 9, 1);
+}
+function drawHeart(cx, cy, s) {
+  fillCircle(cx - s / 2, cy - s / 4, s / 2, 1);
+  fillCircle(cx + s / 2, cy - s / 4, s / 2, 1);
+  for (let i = 0; i <= s; i++) {
+    const w = s - i;
+    hline(cx - w, cy + (i * 3) / 4, w * 2 + 1, 1);
+  }
+}
+function drawStarFilled(cx, cy, r) {
+  const p = [];
+  for (let i = 0; i < 5; i++) {
+    const a = (-90 + i * 72) * D2R;
+    p.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+  }
+  for (let i = 0; i < 5; i++) {
+    const j = (i + 1) % 5;
+    fillTriangle(cx, cy, p[i][0], p[i][1], p[j][0], p[j][1], 1);
+  }
+}
+function drawBolt(cx, cy, h) {
+  line(cx + 3, cy - h, cx - 3, cy, 1); line(cx - 3, cy, cx + 1, cy, 1); line(cx + 1, cy, cx - 3, cy + h, 1);
+  line(cx + 4, cy - h, cx - 2, cy, 1); line(cx, cy, cx + 2, cy, 1); line(cx + 2, cy, cx - 2, cy + h, 1);
+}
+function drawTear(x, y, len) {
+  fillCircle(x, y + len, 2, 1); line(x, y, x, y + len, 1);
+  line(x - 1, y + 2, x, y, 1); line(x + 1, y + 2, x, y, 1);
+}
+function drawZ(x, y, s) {
+  line(x, y, x + s, y, 1); line(x + s, y, x, y + s, 1); line(x, y + s, x + s, y + s, 1);
+}
+function drawSpiral(cx, cy, maxR, a0) {
+  let pxx = cx, pyy = cy;
+  for (let t = 1; t < 90; t++) {
+    const a = a0 + t * 0.30, r = maxR * t / 90;
+    const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+    line(pxx, pyy, x, y, 1); pxx = x; pyy = y;
+  }
+}
+
+// 5x7 metin (OLED ile ayni)
+const FONT5x7 = {
+  'A':[14,17,17,31,17,17,17],'B':[30,17,17,30,17,17,30],'C':[14,17,16,16,16,17,14],
+  'D':[28,18,17,17,17,18,28],'E':[31,16,16,30,16,16,31],'F':[31,16,16,30,16,16,16],
+  'G':[14,17,16,23,17,17,15],'H':[17,17,17,31,17,17,17],'I':[14,4,4,4,4,4,14],
+  'J':[7,2,2,2,2,18,12],'K':[17,18,20,24,20,18,17],'L':[16,16,16,16,16,16,31],
+  'M':[17,27,21,21,17,17,17],'N':[17,25,21,19,17,17,17],'O':[14,17,17,17,17,17,14],
+  'P':[30,17,17,30,16,16,16],'Q':[14,17,17,17,21,18,13],'R':[30,17,17,30,20,18,17],
+  'S':[15,16,16,14,1,1,30],'T':[31,4,4,4,4,4,4],'U':[17,17,17,17,17,17,14],
+  'V':[17,17,17,17,17,10,4],'W':[17,17,17,21,21,27,17],'X':[17,17,10,4,10,17,17],
+  'Y':[17,17,10,4,4,4,4],'Z':[31,1,2,4,8,16,31],' ':[0,0,0,0,0,0,0],
+  '0':[14,17,19,21,25,17,14],'1':[4,12,4,4,4,4,14],'2':[14,17,1,2,4,8,31],
+  '3':[31,2,4,2,1,17,14],'4':[2,6,10,18,31,2,2],'5':[31,16,30,1,1,17,14],
+  '6':[6,8,16,30,17,17,14],'7':[31,1,2,4,8,8,8],'8':[14,17,17,14,17,17,14],
+  '9':[14,17,17,15,1,2,12],':':[0,12,12,0,12,12,0],'-':[0,0,0,31,0,0,0],
+  '/':[1,2,2,4,8,8,16],'.':[0,0,0,0,0,12,12],'!':[4,4,4,4,4,0,4]
+};
+function text(x, y, str, size = 1) {
+  for (const ch of String(str).toUpperCase()) {
+    const g = FONT5x7[ch];
+    if (g) for (let r = 0; r < 7; r++) for (let c = 0; c < 5; c++)
+      if (g[r] & (1 << (4 - c))) fillRect(x + c * size, y + r * size, size, size, 1);
+    x += 6 * size;
+  }
+}
+
+function bigText(x, y, str) { // 6x7 piksel, 2x ölçek
+  const F = { '?': [14,17,1,2,4,0,4], 'E': [31,16,16,30,16,16,31], 'R': [30,17,17,30,20,18,17], 'O': [14,17,17,17,17,17,14], 'A': [14,17,17,31,17,17,17], 'Z': [31,1,2,4,8,16,31] };
+  for (const ch of str) {
+    const g = F[ch]; if (g) for (let r = 0; r < 7; r++) for (let c = 0; c < 5; c++)
+      if (g[r] & (1 << (4 - c))) fillRect(x + c * 2, y + r * 2, 2, 2, 1);
+    x += 12;
+  }
+}
+
+// ============================================================
+//  25 YÜZ  (frame: animasyon karesi, t: ms)
+// ============================================================
+
+// ============================================================
+//  DOKUNUŞ TEPKİLERİ (Quantifriends.ino içindeki 45 tepkinin aynısı)
+// ============================================================
+const TEPKILER = {
+
+  // 1) MUTLU
+  t01_mutlu(f) {
+    drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y);
+    drawArcThick(64, 40, 14, 20, 160);
+    fillCircle(28, 44, 4, 1); fillCircle(100, 44, 4, 1);
+  },
+
+  // 2) ŞAŞIRMA
+  t02_sasirma(f) {
+    const pop = ((f / 6) % 2) ? 1 : 0;
+    circle(EYE_LX, EYE_Y - pop, 11, 1); circle(EYE_RX, EYE_Y - pop, 11, 1);
+    fillCircle(EYE_LX, EYE_Y - pop, 2, 1); fillCircle(EYE_RX, EYE_Y - pop, 2, 1);
+    fillCircle(64, 46, 9, 1); fillCircle(64, 46, 6, 0);
+  },
+
+  // 3) GÜLÜMSEME
+  t03_gulumseme(f) {
+    drawArcThick(EYE_LX, EYE_Y, 8, 200, 340);
+    drawArcThick(EYE_RX, EYE_Y, 8, 200, 340);
+    drawArcThick(64, 38, 16, 10, 170);
+    fillCircle(26, 44, 4, 1); fillCircle(102, 44, 4, 1);
+  },
+
+  // 4) ZIPLAMA
+  t04_ziplama(f) {
+    const hop = ((f / 5) % 2) ? 3 : 0;
+    drawEyeOpen(EYE_LX, EYE_Y - hop); drawEyeOpen(EYE_RX, EYE_Y - hop);
+    drawArcThick(64, 40 - hop, 12, 20, 160);
+    hline(46, 62, 36 - hop * 4, 1);
+  },
+
+  // 5) GÖZ KIRPMA
+  t05_gozkirpma(f) {
+    drawEyeOpen(EYE_LX, EYE_Y);
+    if ((f / 8) % 2) {
+      drawEyeClosed(EYE_RX, EYE_Y);
+      line(EYE_RX - 7, EYE_Y + 4, EYE_RX + 7, EYE_Y - 3, 1);
+    } else drawEyeOpen(EYE_RX, EYE_Y);
+    drawArcThick(64, 38, 14, 20, 160);
+  },
+
+  // 6) KIZGIN
+  t06_kizgin(f) {
+    const ox = ((f / 4) % 2) ? 1 : -1;
+    drawEyeOpen(EYE_LX + ox, EYE_Y); drawEyeOpen(EYE_RX + ox, EYE_Y);
+    line(30 + ox, 10, 52 + ox, 17, 1);
+    line(98 + ox, 10, 76 + ox, 17, 1);
+    drawArcThick(64, 48, 14, 200, 340);
+  },
+
+  // 7) UTANGAÇ
+  t07_utangac(f) {
+    const look = ((f / 10) % 2) ? -2 : 2;
+    circle(EYE_LX + look, EYE_Y, EYE_R, 1); circle(EYE_RX + look, EYE_Y, EYE_R, 1);
+    fillCircle(EYE_LX + look + 3, EYE_Y + 2, 3, 1);
+    fillCircle(EYE_RX + look + 3, EYE_Y + 2, 3, 1);
+    for (let i = 0; i < 3; i++) {
+      line(16 + i * 5, 44, 20 + i * 5, 38, 1);
+      line(94 + i * 5, 44, 98 + i * 5, 38, 1);
+    }
+    line(58, 50, 70, 50, 1);
+  },
+
+  // 8) SIKILMIŞ
+  t08_sikilmis(f) {
+    for (const cx of [EYE_LX, EYE_RX]) {
+      circle(cx, EYE_Y, EYE_R, 1);
+      fillCircle(cx, EYE_Y - 5 + (f / 20) % 3, 3, 1);
+    }
+    fillCircle(20, 44, 7, 1); fillCircle(108, 44, 7, 1);
+    line(58, 46, 64, 44, 1); line(64, 44, 70, 46, 1);
+  },
+
+  // 9) HEYECAN
+  t09_heyecan(f) {
+    const hop = ((f / 6) % 2) ? 2 : 0;
+    drawStarFilled(EYE_LX, EYE_Y - hop, 9);
+    drawStarFilled(EYE_RX, EYE_Y - hop, 9);
+    fillCircle(64, 44 - hop, 7, 1); fillCircle(64, 42 - hop, 4, 0);
+    px(20, 14, 1); px(108, 14, 1);
+  },
+
+  // 10) KORKU
+  t10_korku(f) {
+    const t = ((f / 3) % 2) ? 2 : -2;
+    circle(EYE_LX + t, EYE_Y, 11, 1); circle(EYE_RX + t, EYE_Y, 11, 1);
+    fillCircle(EYE_LX + t, EYE_Y + 2, 1, 1); fillCircle(EYE_RX + t, EYE_Y + 2, 1, 1);
+    for (let x = 50; x < 78; x += 4)
+      line(x, 46 + ((x / 4) % 2) * 3, x + 4, 46 + (((x / 4) + 1) % 2) * 3, 1);
+  },
+
+  // 11) YORGUN
+  t11_yorgun(f) {
+    for (const cx of [EYE_LX, EYE_RX]) {
+      circle(cx, EYE_Y, EYE_R, 1);
+      fillCircle(cx, EYE_Y + 3, 3, 1);
+      fillRect(cx - 11, EYE_Y - 11, 22, 13, 0);
+      hline(cx - 10, EYE_Y - 9, 21, 1);
+    }
+    drawArc(EYE_LX, EYE_Y + 13, 8, 20, 160);
+    drawArc(EYE_RX, EYE_Y + 13, 8, 20, 160);
+    hline(56, 50, 17, 1);
+  },
+
+  // 12) HAVALI
+  t12_havali(f) {
+    const gy = 20 + ((f < 10) ? f * 2 : 20);
+    if (gy < 40) { drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y); }
+    fillRect(26, gy, 34, 13, 1); fillRect(68, gy, 34, 13, 1);
+    fillRect(60, gy + 3, 8, 3, 1);
+    line(32, gy + 10, 42, gy + 2, 0); line(74, gy + 10, 84, gy + 2, 0);
+    drawArc(64, 46, 14, 20, 140);
+  },
+
+  // 13) MÜZİK
+  t13_muzik(f) {
+    const bob = ((f / 10) % 2) ? 1 : -1;
+    drawArc(64, 24, 32, 190, 350);
+    fillRect(24, 22, 7, 14, 1); fillRect(97, 22, 7, 14, 1);
+    fillCircle(EYE_LX, EYE_Y + bob, 7, 1); fillCircle(EYE_RX, EYE_Y + bob, 7, 1);
+    drawArcThick(64, 42 + bob, 9, 20, 160);
+    const ny = 8 + (f % 6);
+    fillCircle(112, ny, 2, 1); line(114, ny, 114, ny - 6, 1);
+  },
+
+  // 14) ŞÜPHECİ
+  t14_supheci(f) {
+    circle(EYE_LX, EYE_Y, EYE_R, 1); fillCircle(EYE_LX + 3, EYE_Y, 3, 1);
+    line(EYE_RX - 9, EYE_Y, EYE_RX + 9, EYE_Y, 1);
+    line(32, 12, 50, 14, 1); line(78, 4, 96, 10, 1);
+    line(54, 46, 62, 44, 1); line(62, 44, 74, 46, 1);
+  },
+
+  // 15) ACIKMIŞ
+  t15_acikmis(f) {
+    drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y);
+    fillCircle(64, 44, 9, 1); fillCircle(64, 42, 6, 0);
+    const tx = 64 + ((f / 6) % 3 - 1) * 3;
+    fillRect(tx - 4, 46, 8, 8, 1); fillCircle(tx, 53, 4, 1);
+    fillCircle(24, 42, 3, 1); fillCircle(104, 42, 3, 1);
+  },
+
+  // 16) KUTLAMA
+  t16_kutlama(f) {
+    drawEyeOpen(EYE_LX, EYE_Y + 2); drawEyeOpen(EYE_RX, EYE_Y + 2);
+    fillTriangle(50, 14, 78, 14, 64, 0, 1);
+    hline(50, 14, 29, 1);
+    fillCircle(64, 42, 8, 1); fillCircle(64, 40, 5, 0);
+    for (let i = 0; i < 8; i++) {
+      const cx = 8 + i * 15, cy = (f * 3 + i * 7) % 40 + 4;
+      px(cx, cy, 1);
+      if (i % 2) px(cx + 1, cy + 1, 1);
+    }
+  },
+
+  // 17) BAŞ DÖNMESİ
+  t17_basdonmesi(f) {
+    const a0 = f * 0.35;
+    drawSpiral(EYE_LX, EYE_Y, 10, a0);
+    drawSpiral(EYE_RX, EYE_Y, 10, a0);
+    for (let x = 48; x < 82; x += 4)
+      line(x, 46 + Math.sin((x + f * 4) * 0.35) * 2,
+           x + 4, 46 + Math.sin((x + 4 + f * 4) * 0.35) * 2, 1);
+  },
+
+  // 18) ŞARJ
+  t18_sarj(f) {
+    drawBolt(EYE_LX, EYE_Y, 9); drawBolt(EYE_RX, EYE_Y, 9);
+    drawArcThick(64, 40, 12, 20, 160);
+    const doluluk = (f / 3) % 20;
+    const d = doluluk < 10 ? doluluk : 19 - doluluk;
+    rect(34, 54, 60, 8, 1);
+    const w = Math.floor((d * 56) / 9);
+    if (w > 0) fillRect(36, 56, w, 4, 1);
+  },
+
+  // 19) ÖPÜCÜK
+  t19_opucuk(f) {
+    const op = (f / 8) % 2;
+    if (op) drawEyeClosed(EYE_LX, EYE_Y); else drawEyeOpen(EYE_LX, EYE_Y);
+    drawEyeOpen(EYE_RX, EYE_Y);
+    circle(64, 46, 4, 1); fillCircle(64, 46, 2, 1);
+    if (op) drawHeart(84 + (f % 40), 44 - (f % 40) / 2, 4);
+  },
+
+  // 20) KARIŞIK
+  t20_karisik(f) {
+    fillCircle(EYE_LX, EYE_Y, 9, 1); fillCircle(EYE_LX + 2, EYE_Y + 1, 3, 0);
+    fillCircle(EYE_RX, EYE_Y + 2, 6, 1); fillCircle(EYE_RX - 2, EYE_Y + 3, 2, 0);
+    line(56, 48, 62, 44, 1); line(62, 44, 70, 48, 1);
+    if ((f / 8) % 2) bigText(104, 2, '?');
+  },
+
+  // 21) GLITCH
+  t21_glitch(f) {
+    fillRect(EYE_LX - 9, EYE_Y - 6, 18, 5, 1);
+    fillRect(EYE_LX - 9 + ((f % 3) - 1) * 3, EYE_Y + 1, 12, 5, 1);
+    fillRect(EYE_RX - 9, EYE_Y - 6, 18, 5, 1);
+    fillRect(EYE_RX - 9 + (f % 2) * 4, EYE_Y + 1, 12, 5, 1);
+    line(50, 46, 60, 42, 1); line(62, 48, 72, 44, 1);
+    for (let i = 0; i < 50; i++)
+      px((i * 37 + f * 53) % 128, (i * 61 + f * 17) % 64, 1);
+  },
+
+  // 22) AŞKIN
+  t22_askin(f) {
+    const beat = ((f / 8) % 2) ? 1 : 0;
+    drawHeart(EYE_LX, EYE_Y, 9 + beat);
+    drawHeart(EYE_RX, EYE_Y, 9 + beat);
+    drawHeart(64, 46, 6);
+    const p = f % 10;
+    if (p < 5) { px(16, 20 - p * 2, 1); px(112, 20 - ((p + 3) % 5) * 2, 1); }
+  },
+
+  // 23) UYUMA
+  t23_uyuma(f) {
+    drawEyeClosed(EYE_LX, EYE_Y); drawEyeClosed(EYE_RX, EYE_Y);
+    fillCircle(64, 47, 4, 1); fillCircle(64, 46, 2, 0);
+    hline(44, 58 + (((f % 8) < 4) ? 0 : 1), 40, 1);
+    for (let i = 0; i < 3; i++) {
+      const pp = ((f % 12) + i * 4) % 12;
+      const sz = 2 + Math.floor(pp / 4);
+      const zx = 92 + pp, zy = 30 - pp * 2;
+      if (zy > 2 && zx < 124) {
+        line(zx, zy, zx + sz, zy, 1);
+        line(zx + sz, zy, zx, zy + sz, 1);
+        line(zx, zy + sz, zx + sz, zy + sz, 1);
+      }
+    }
+  },
+
+  // 24) ESNEME
+  t24_esneme(f) {
+    const mo = 3 + ((f / 8) % 3);
+    drawEyeClosed(EYE_LX, EYE_Y); drawEyeClosed(EYE_RX, EYE_Y);
+    fillCircle(64, 44, mo + 3, 1); fillCircle(64, 44, mo, 0);
+    line(16, 20, 22, 16, 1); line(110, 20, 104, 16, 1);
+  },
+
+  // 25) GÜLME
+  t25_gulme(f) {
+    drawArcThick(EYE_LX, EYE_Y - 1, 9, 200, 340);
+    drawArcThick(EYE_RX, EYE_Y - 1, 9, 200, 340);
+    fillCircle(64, 42, 11, 1); fillCircle(64, 40, 8, 0);
+    px(56, 48, 1); px(64, 50, 1); px(72, 48, 1);
+  },
+
+  // 26) DÜŞÜNME
+  t26_dusunme(f) {
+    circle(EYE_LX, EYE_Y, EYE_R, 1); circle(EYE_RX, EYE_Y, EYE_R, 1);
+    fillCircle(EYE_LX, EYE_Y - 5, 3, 1); fillCircle(EYE_RX, EYE_Y - 5, 3, 1);
+    hline(58, 48, 12, 1);
+    circle(104, 16, 9, 1); circle(96, 28, 3, 1); circle(90, 34, 1, 1);
+    if ((f / 6) % 2) { px(101, 14, 1); px(107, 18, 1); }
+  },
+
+  // 27) HAPSIRMA
+  t27_hapsirma(f) {
+    drawEyeClosed(EYE_LX, EYE_Y); drawEyeClosed(EYE_RX, EYE_Y);
+    fillCircle(64, 46, 8, 1); fillCircle(64, 46, 5, 0);
+    for (let i = 0; i < 3; i++)
+      line(96 + i * 3, 18 + i * 2, 110 + i * 3, 24 + i * 2, 1);
+  },
+
+  // 28) ORKESTRA
+  t28_orkestra(f) {
+    drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y);
+    drawArcThick(64, 40, 12, 20, 160);
+    for (let i = 0; i < 4; i++) {
+      const h = 6 + ((f / 4 + i * 2) % 12);
+      vline(18 + i * 8, 40 - h, h, 1);
+      vline(94 + i * 8, 40 - h, h, 1);
+    }
+  },
+
+  // 29) KAFA SALLAMA
+  t29_kafasallama(f) {
+    const dx = ((f / 6) % 2) ? 3 : -3;
+    drawEyeOpen(EYE_LX + dx, EYE_Y); drawEyeOpen(EYE_RX + dx, EYE_Y);
+    drawArcThick(64 + dx, 40, 12, 20, 160);
+    line(24 - dx, 20, 30 - dx, 14, 1);
+  },
+
+  // 30) EL SALLAMA
+  t30_elsallama(f) {
+    drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y);
+    drawArcThick(64, 40, 13, 20, 160);
+    const d = ((f / 5) % 2) ? 4 : -4;
+    line(104, 30, 112 + d, 16, 1);
+    line(108, 32, 116 + d, 18, 1);
+  },
+
+  // 31) GÖZ KIRPMA SERİSİ
+  t31_gozkirpseri(f) {
+    const k = (f / 4) % 2;
+    if (k) { drawEyeClosed(EYE_LX, EYE_Y); drawEyeClosed(EYE_RX, EYE_Y); }
+    else { drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y); }
+    drawArcThick(64, 38, 14, 20, 160);
+  },
+
+  // 32) TİTREME
+  t32_titreme(f) {
+    const t = ((f / 2) % 2) ? 1 : -1;
+    drawEyeOpen(EYE_LX + t, EYE_Y + t); drawEyeOpen(EYE_RX + t, EYE_Y + t);
+    line(56 + t, 46 + t, 72 + t, 46 + t, 1);
+    line(20, 30 + t * 2, 24, 30 + t * 2, 1);
+    line(104, 30 - t * 2, 108, 30 - t * 2, 1);
+  },
+
+  // 33) POFLA
+  t33_pofla(f) {
+    drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y);
+    const puff = 6 + ((f / 8) % 3);
+    fillCircle(20, 44, puff, 1); fillCircle(108, 44, puff, 1);
+    line(58, 46, 64, 44, 1); line(64, 44, 70, 46, 1);
+    px(116, 34, 1); px(120, 30, 1);
+  },
+
+  // 34) DANST
+  t34_danst(f) {
+    const hop = ((f / 4) % 2) ? 3 : 0;
+    drawEyeOpen(EYE_LX, EYE_Y - hop); drawEyeOpen(EYE_RX, EYE_Y - hop);
+    drawArcThick(64, 40 - hop, 12, 20, 160);
+    px(14, 14 + (f % 16), 1); px(112, 30 - (f % 16), 1);
+    hline(40, 62, 48, 1);
+  },
+
+  // 35) KALP ATIŞI
+  t35_kalpatisi(f) {
+    const beat = ((f / 5) % 2) ? 2 : 0;
+    drawHeart(EYE_LX, EYE_Y, 8 + beat);
+    drawHeart(EYE_RX, EYE_Y, 8 + beat);
+    drawArcThick(64, 40, 12, 20, 160);
+  },
+
+  // 36) YILDIZ
+  t36_yildiz(f) {
+    drawStarFilled(EYE_LX, EYE_Y, 8);
+    drawStarFilled(EYE_RX, EYE_Y, 8);
+    drawArcThick(64, 40, 12, 20, 160);
+    if ((f / 5) % 2) { px(64, 6, 1); px(20, 20, 1); }
+  },
+
+  // 37) BULUT
+  t37_bulut(f) {
+    drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y);
+    drawArc(64, 50, 14, 200, 340);
+    circle(36, 14, 7, 1); circle(52, 10, 9, 1);
+    circle(72, 12, 8, 1); circle(88, 16, 6, 1);
+    hline(30, 22, 64, 1);
+    if ((f / 6) % 2) { px(46, 26, 1); px(66, 26, 1); }
+  },
+
+  // 38) GÜNEŞ
+  t38_gunes(f) {
+    drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y);
+    drawArcThick(64, 40, 12, 20, 160);
+    for (let i = 0; i < 8; i++) {
+      const a = (i * 45 + f * 3) * Math.PI / 180;
+      line(64 + Math.cos(a) * 26, 30 + Math.sin(a) * 26,
+           64 + Math.cos(a) * 32, 30 + Math.sin(a) * 32, 1);
+    }
+  },
+
+  // 39) ATEŞ
+  t39_ates(f) {
+    fillTriangle(EYE_LX - 9, EYE_Y + 4, EYE_LX + 9, EYE_Y + 4, EYE_LX, EYE_Y - 10, 1);
+    fillTriangle(EYE_RX - 9, EYE_Y + 4, EYE_RX + 9, EYE_Y + 4, EYE_RX, EYE_Y - 10, 1);
+    const w = 4 + ((f / 4) % 4);
+    fillCircle(EYE_LX, EYE_Y + 2, w, 0); fillCircle(EYE_RX, EYE_Y + 2, w, 0);
+    drawArcThick(64, 50, 12, 200, 340);
+  },
+
+  // 40) BUZ
+  t40_buz(f) {
+    for (const cx of [EYE_LX, EYE_RX]) {
+      for (let i = 0; i < 3; i++) {
+        const a = (i * 60 + f * 2) * Math.PI / 180;
+        line(cx - Math.cos(a) * 9, EYE_Y - Math.sin(a) * 9,
+             cx + Math.cos(a) * 9, EYE_Y + Math.sin(a) * 9, 1);
+      }
+    }
+    hline(56, 48, 17, 1);
+  },
+
+  // 41) ROKET
+  t41_roket(f) {
+    const hop = ((f / 4) % 2) ? 3 : 0;
+    drawEyeOpen(EYE_LX, EYE_Y - hop); drawEyeOpen(EYE_RX, EYE_Y - hop);
+    drawArcThick(64, 40 - hop, 12, 20, 160);
+    fillTriangle(60, 58, 68, 58, 64, 64, 1);
+    vline(64, 54, 6, 1);
+  },
+
+  // 42) YILDIRIM
+  t42_yildirim(f) {
+    if ((f / 3) % 2) fillRect(0, 0, 128, 64, 1);
+    fillRect(58, 4, 12, 40, 0);
+    drawBolt(64, 28, 18);
+    drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y);
+  },
+
+  // 43) BALON
+  t43_balon(f) {
+    drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y);
+    drawArcThick(64, 40, 12, 20, 160);
+    const by = 46 - (f % 40);
+    circle(104, by, 7, 1); line(104, by + 7, 104, by + 12, 1);
+  },
+
+  // 44) YAPRAK
+  t44_yaprak(f) {
+    drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y);
+    drawArcThick(64, 40, 12, 20, 160);
+    for (let i = 0; i < 6; i++) {
+      const x = (i * 23 + (f / 2)) % 128, y = (i * 13 + f) % 64;
+      line(x, y, x + 3, y + 2, 1);
+    }
+  },
+
+
+  // 45) KAR
+  t45_kar(f) {
+    drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y);
+    drawArcThick(64, 40, 12, 20, 160);
+    for (let i = 0; i < 14; i++)
+      px((i * 31 + (f / 3)) % 128, (i * 19 + f) % 64, 1);
+  },
+
+  // 46) DİL ÇIKARMA (menüden açılır)
+  dil(f) {
+    // döngü: çık (0-18) -> gezdir (19-60) -> içeri (61-76) -> bekle (77-84)
+    const dongu = f % 85;
+    let uzunluk = 0, kaydir = 0, agizAcik = 6;
+
+    if (dongu < 18) {                    // çıkış
+      const t = dongu / 18;
+      uzunluk = t; agizAcik = 6 + Math.floor(t * 6);
+    } else if (dongu < 61) {             // gezdirme
+      uzunluk = 1; agizAcik = 12;
+      kaydir = Math.round(Math.sin((dongu - 18) / 4) * 8);
+    } else if (dongu < 77) {             // içeri
+      const t = (dongu - 61) / 16;
+      uzunluk = 1 - t; agizAcik = 12 - Math.floor(t * 6);
+    } else {                             // bekle
+      uzunluk = 0; agizAcik = 4;
+    }
+
+    // gözler
+    if (dongu >= 18 && dongu < 61) {
+      drawEyeOpen(EYE_LX + Math.round(kaydir / 3), EYE_Y);
+      drawEyeOpen(EYE_RX + Math.round(kaydir / 3), EYE_Y);
+    } else {
+      drawArcThick(EYE_LX, EYE_Y, 9, 200, 340);
+      drawArcThick(EYE_RX, EYE_Y, 9, 200, 340);
+    }
+
+    // ağız boşluğu
+    fillRect(64 - 14, 44, 28, agizAcik, 1);
+    fillRect(64 - 12, 45, 24, agizAcik - 2, 0);
+
+    // dil
+    const boy = Math.floor(uzunluk * 16);
+    if (boy > 0) {
+      const x = 64 + kaydir;
+      fillRect(x - 4, 44, 8, boy, 1);
+      if (boy > 4) fillCircle(x, 44 + boy, 4, 1);
+      if (boy > 6) vline(x, 46, boy - 2, 0);
+    }
+
+    fillCircle(24, 42, 4, 1);
+    fillCircle(104, 42, 4, 1);
+
+    if (dongu >= 18 && dongu < 61) textYaz(0, 0, 'DIL GEZIYOR');
+    else if (dongu < 18) textYaz(0, 0, 'DIL CIKTI');
+    else if (dongu < 77) textYaz(0, 0, 'DIL GIRDI');
+  },
+
+  // 72) SAAT (telefondan senkron)
+  saat(f) {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const ss = String(now.getSeconds()).padStart(2, '0');
+    // büyük saat
+    text(14, 12, hh + ':' + mm, 3);
+    // saniye
+    text(14, 40, ss, 2);
+    // tarih benzeri alt bilgi
+    text(52, 42, 'SENKRON', 1);
+    // köşede küçük saat
+    text(92, 0, hh + ':' + mm, 1);
+    // saniye göstergesi noktası
+    px(10 + (now.getSeconds() % 40), 60, 1);
+  }
+};
+
+const FACES = {
+
+  mutlu(f) {
+    const blink = (f % 28) === 6;
+    if (blink) { drawEyeClosed(EYE_LX, EYE_Y); drawEyeClosed(EYE_RX, EYE_Y); }
+    else {
+      drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y);
+      px(EYE_LX + 4, EYE_Y + 4, 1); px(EYE_RX + 4, EYE_Y + 4, 1);
+    }
+    drawArcThick(64, 40, 15, 20, 160);
+    fillCircle(28, 44, 4, 1); fillCircle(100, 44, 4, 1);
+  },
+
+  huzunlu(f) {
+    const tear = f % 8;
+    drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y);
+    fillCircle(EYE_LX - 5, EYE_Y + 7, 3, 1); fillCircle(EYE_RX + 5, EYE_Y + 7, 3, 1);
+    drawTear(EYE_LX - 6, EYE_Y + 10 + tear, 3);
+    drawTear(EYE_RX + 6, EYE_Y + 10 + ((tear + 4) % 8), 3);
+    drawArcThick(64, 48, 15, 200, 340);
+    fillCircle(26, 44, 3, 1); fillCircle(102, 44, 3, 1);
+  },
+
+  duygusuz() {
+    circle(EYE_LX, EYE_Y, EYE_R, 1); circle(EYE_RX, EYE_Y, EYE_R, 1);
+    fillCircle(EYE_LX, EYE_Y, 3, 1); fillCircle(EYE_RX, EYE_Y, 3, 1);
+    hline(54, 46, 20, 1);
+    px(6, 6, 1); px(121, 6, 1); px(6, 57, 1); px(121, 57, 1);
+  },
+
+  ofkeli(f) {
+    const ox = ((f % 4) < 2) ? 1 : -1;
+    drawEyeOpen(EYE_LX + ox, EYE_Y); drawEyeOpen(EYE_RX + ox, EYE_Y);
+    line(30 + ox, 12, 52 + ox, 19, 1); line(31 + ox, 13, 53 + ox, 20, 1);
+    line(98 + ox, 12, 76 + ox, 19, 1); line(97 + ox, 13, 75 + ox, 20, 1);
+    drawArcThick(64, 50, 14, 200, 340);
+    line(104, 24, 110, 28, 1); line(110, 24, 104, 28, 1);
+    line(104, 22, 110, 22, 1); line(104, 30, 110, 30, 1);
+  },
+
+  sasirmis(f) {
+    const pop = ((f % 6) < 3) ? 0 : 1;
+    circle(EYE_LX, EYE_Y - pop, 11, 1); circle(EYE_RX, EYE_Y - pop, 11, 1);
+    fillCircle(EYE_LX, EYE_Y - pop, 2, 1); fillCircle(EYE_RX, EYE_Y - pop, 2, 1);
+    fillCircle(64, 48, 9, 1); fillCircle(64, 48, 6, 0);
+    line(34, 12, 48, 8, 1); line(80, 8, 94, 12, 1);
+  },
+
+  uykulu(f) {
+    const p = f % 12;
+    const lid = p < 4 ? 2 : (p < 8 ? 5 : 1);
+    for (const cx of [EYE_LX, EYE_RX]) {
+      circle(cx, EYE_Y, EYE_R, 1);
+      fillCircle(cx, EYE_Y + 2, 3, 1);
+      fillRect(cx - 11, EYE_Y - 11, 22, 11 + lid, 0);
+      hline(cx - 10, EYE_Y - 10 + lid, 21, 1);
+    }
+    const mo = p >= 6 ? 6 : 3;
+    fillCircle(64, 47, mo, 1); fillCircle(64, 47, mo - 2, 0);
+    fillCircle(26, 42, 3, 1); fillCircle(102, 42, 3, 1);
+  },
+
+  derinuyku(f) {
+    drawEyeClosed(EYE_LX, EYE_Y); drawEyeClosed(EYE_RX, EYE_Y);
+    fillCircle(64, 47, 4, 1); fillCircle(64, 46, 2, 0);
+    const breath = (f % 8) < 4 ? 0 : 1;
+    hline(44, 58 + breath, 40, 1);
+    const phase = f % 12;
+    for (let i = 0; i < 3; i++) {
+      const p = (phase + i * 4) % 12;
+      const sz = 2 + Math.floor(p / 4);
+      const zx = 92 + p, zy = 30 - p * 2;
+      if (zy > 2 && zx < 124) drawZ(zx, zy, sz);
+    }
+  },
+
+  sevecen(f) {
+    const beat = ((f % 8) < 4) ? 0 : 1;
+    drawHeart(EYE_LX, EYE_Y, 9 + beat);
+    drawHeart(EYE_RX, EYE_Y, 9 + beat);
+    drawHeart(64, 48, 6);
+    const p = f % 10;
+    if (p < 5) { px(16, 20 - p * 2, 1); px(112, 20 - ((p + 3) % 5) * 2, 1); }
+    fillCircle(24, 44, 3, 1); fillCircle(104, 44, 3, 1);
+  },
+
+  gozkirpan(f) {
+    const wink = (f % 10) < 5;
+    drawEyeOpen(EYE_LX, EYE_Y);
+    if (wink) { drawEyeClosed(EYE_RX, EYE_Y); line(EYE_RX - 7, EYE_Y + 4, EYE_RX + 7, EYE_Y - 3, 1); }
+    else drawEyeOpen(EYE_RX, EYE_Y);
+    drawArc(64, 38, 16, 10, 120);
+    line(78, 48, 88, 42, 1);
+    fillCircle(26, 44, 3, 1);
+  },
+
+  utanmis(f) {
+    const look = (f % 10 < 5) ? -2 : 2;
+    circle(EYE_LX + look, EYE_Y, EYE_R, 1); circle(EYE_RX + look, EYE_Y, EYE_R, 1);
+    fillCircle(EYE_LX + look + 3, EYE_Y + 2, 3, 1); fillCircle(EYE_RX + look + 3, EYE_Y + 2, 3, 1);
+    for (let i = 0; i < 3; i++) {
+      line(16 + i * 5, 44, 20 + i * 5, 38, 1);
+      line(94 + i * 5, 44, 98 + i * 5, 38, 1);
+    }
+    line(58, 50, 70, 50, 1); px(58, 49, 1); px(70, 49, 1);
+  },
+
+  sikilmis(f) {
+    const roll = f % 8;
+    for (const cx of [EYE_LX, EYE_RX]) {
+      circle(cx, EYE_Y, EYE_R, 1);
+      fillCircle(cx, EYE_Y - 5 + Math.floor(roll / 4), 3, 1);
+    }
+    const puff = roll < 4 ? 5 : 7;
+    fillCircle(20, 44, puff, 1); fillCircle(108, 44, puff, 1);
+    line(58, 46, 64, 44, 1); line(64, 44, 70, 46, 1);
+    if (roll < 4) { px(112, 34, 1); px(116, 30, 1); }
+  },
+
+  heyecanli(f) {
+    const hop = ((f % 4) < 2) ? 0 : 2;
+    drawStarFilled(EYE_LX, EYE_Y - hop, 9);
+    drawStarFilled(EYE_RX, EYE_Y - hop, 9);
+    if ((f % 4) < 2) { px(20, 14, 1); px(108, 14, 1); px(64, 8, 1); }
+    else { px(24, 18, 1); px(104, 18, 1); }
+    fillCircle(64, 46 - hop, 7, 1); fillCircle(64, 44 - hop, 4, 0);
+    fillCircle(24, 42, 3, 1); fillCircle(104, 42, 3, 1);
+  },
+
+  korkmus(f) {
+    const t = ((f % 4) < 2) ? 1 : -1;
+    circle(EYE_LX + t, EYE_Y, 11, 1); circle(EYE_RX + t, EYE_Y, 11, 1);
+    fillCircle(EYE_LX + t, EYE_Y + 2, 1, 1); fillCircle(EYE_RX + t, EYE_Y + 2, 1, 1);
+    for (let x = 50; x < 78; x += 4) {
+      line(x, 46 + (Math.floor(x / 4) % 2) * 3, x + 4, 46 + ((Math.floor(x / 4) + 1) % 2) * 3, 1);
+    }
+    if ((f % 6) < 3) { px(110, 18, 1); px(110, 20, 1); } else px(112, 22, 1);
+  },
+
+  yorgun(f) {
+    const sag = (f % 10) < 5 ? 0 : 1;
+    for (const cx of [EYE_LX, EYE_RX]) {
+      circle(cx, EYE_Y, EYE_R, 1);
+      fillCircle(cx, EYE_Y + 3, 3, 1);
+      fillRect(cx - 11, EYE_Y - 11, 22, 13, 0);
+      hline(cx - 10, EYE_Y - 9, 21, 1);
+    }
+    drawArc(EYE_LX, EYE_Y + 13, 8, 20, 160);
+    drawArc(EYE_RX, EYE_Y + 13, 8, 20, 160);
+    hline(56, 50 + sag, 17, 1);
+    if (sag) { px(112, 44, 1); px(116, 44, 1); }
+  },
+
+  havali(f) {
+    const slide = f < 5 ? f * 3 : 15;
+    if (slide < 15) { drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y); }
+    const gy = 20 + slide;
+    fillRect(26, gy, 34, 13, 1); fillRect(68, gy, 34, 13, 1); fillRect(60, gy + 3, 8, 3, 1);
+    line(32, gy + 10, 42, gy + 2, 0); line(74, gy + 10, 84, gy + 2, 0);
+    drawArc(64, 44, 15, 20, 140);
+    line(78, 52, 90, 44, 1);
+  },
+
+  odaklanmis(f) {
+    fillRect(18, 8, 92, 6, 1); px(64, 14, 1);
+    fillRect(EYE_LX - 9, EYE_Y - 2, 18, 7, 1); fillRect(EYE_RX - 9, EYE_Y - 2, 18, 7, 1);
+    fillCircle(EYE_LX + 2, EYE_Y + 1, 2, 0); fillCircle(EYE_RX + 2, EYE_Y + 1, 2, 0);
+    line(56, 46, 72, 46, 1); line(56, 47, 72, 47, 1);
+    if ((f % 8) < 4) { px(112, 22, 1); px(112, 24, 1); px(112, 26, 1); }
+    hline(44, 56, 40, 1); hline(50, 60, 28, 1);
+  },
+
+  muzik(f) {
+    const bob = ((f % 4) < 2) ? 1 : -1;
+    drawArc(64, 26, 34, 190, 350); drawArc(64, 26, 33, 190, 350);
+    fillRect(24, 24, 7, 14, 1); fillRect(97, 24, 7, 14, 1);
+    fillCircle(EYE_LX, EYE_Y + bob, 7, 1); fillCircle(EYE_RX, EYE_Y + bob, 7, 1);
+    fillCircle(EYE_LX - 2, EYE_Y + bob - 2, 2, 0); fillCircle(EYE_RX - 2, EYE_Y + bob - 2, 2, 0);
+    drawArcThick(64, 42 + bob, 10, 20, 160);
+    const n = f % 10;
+    if (n < 6) {
+      const ny = 8 + n;
+      fillCircle(112, ny, 2, 1); line(114, ny, 114, ny - 6, 1); line(114, ny - 6, 118, ny - 5, 1);
+    }
+  },
+
+  supheci(f) {
+    const squint = (f % 10) < 4;
+    circle(EYE_LX, EYE_Y, EYE_R, 1); fillCircle(EYE_LX + 3, EYE_Y, 3, 1);
+    if (squint) { line(EYE_RX - 9, EYE_Y, EYE_RX + 9, EYE_Y, 1); line(EYE_RX - 7, EYE_Y + 1, EYE_RX + 7, EYE_Y + 1, 1); }
+    else {
+      circle(EYE_RX, EYE_Y, EYE_R, 1); fillCircle(EYE_RX + 3, EYE_Y, 3, 1);
+      fillRect(EYE_RX - 11, EYE_Y - 11, 22, 6, 0);
+    }
+    line(32, 12, 50, 14, 1); line(78, 4, 96, 10, 1);
+    line(54, 46, 62, 44, 1); line(62, 44, 74, 46, 1);
+  },
+
+  acikmis(f) {
+    const lick = f % 10;
+    drawEyeOpen(EYE_LX, EYE_Y); drawEyeOpen(EYE_RX, EYE_Y);
+    fillCircle(64, 44, 9, 1); fillCircle(64, 42, 6, 0);
+    const tx = 64 + ((lick < 5) ? (lick - 2) : (7 - lick)) * 2;
+    fillRect(tx - 4, 46, 8, 8, 1); fillCircle(tx, 53, 4, 1);
+    line(tx, 47, tx, 51, 0);
+    if (lick > 6) { px(tx + 6, 55, 1); px(tx + 6, 57, 1); }
+    fillCircle(24, 42, 3, 1); fillCircle(104, 42, 3, 1);
+  },
+
+  kutlama(f) {
+    drawEyeOpen(EYE_LX, EYE_Y + 2); drawEyeOpen(EYE_RX, EYE_Y + 2);
+    fillTriangle(50, 14, 78, 14, 64, 0, 1);
+    hline(50, 14, 29, 1); fillCircle(64, 1, 2, 1);
+    fillCircle(64, 42, 8, 1); fillCircle(64, 40, 5, 0);
+    const p = f % 8;
+    for (let i = 0; i < 8; i++) {
+      const cx = 8 + i * 15, cy = (p * 3 + i * 7) % 40 + 4;
+      px(cx, cy, 1);
+      if (i % 2) px(cx + 1, cy + 1, 1);
+    }
+    fillCircle(24, 44, 3, 1); fillCircle(104, 44, 3, 1);
+  },
+
+  basdonmesi(f) {
+    const a0 = f * 0.6;
+    drawSpiral(EYE_LX, EYE_Y, 10, a0);
+    drawSpiral(EYE_RX, EYE_Y, 10, a0);
+    for (let x = 48; x < 82; x += 4) {
+      const y1 = 46 + Math.sin((x + f * 4) * 0.35) * 2;
+      const y2 = 46 + Math.sin((x + 4 + f * 4) * 0.35) * 2;
+      line(x, y1, x + 4, y2, 1);
+    }
+    px(14, 8, 1); px(112, 10, 1); px(30, 2, 1);
+  },
+
+  sarj(f) {
+    drawBolt(EYE_LX, EYE_Y, 9); drawBolt(EYE_RX, EYE_Y, 9);
+    drawArcThick(64, 40, 12, 20, 160);
+    const lvl = f % 20;
+    const fill = lvl < 10 ? lvl : (19 - lvl);
+    rect(34, 54, 60, 8, 1);
+    const w = Math.floor((fill * 56) / 9);
+    if (w > 0) fillRect(36, 56, w, 4, 1);
+    fillRect(95, 56, 3, 4, 1);
+    if ((f % 6) < 3) { px(14, 24, 1); px(112, 24, 1); }
+  },
+
+  opucuk(f) {
+    const kiss = (f % 10) < 5;
+    if (kiss) drawEyeClosed(EYE_LX, EYE_Y); else drawEyeOpen(EYE_LX, EYE_Y);
+    drawEyeOpen(EYE_RX, EYE_Y);
+    circle(64, 46, 4, 1); fillCircle(64, 46, 2, 1);
+    if (kiss) { const p = f % 8; drawHeart(84 + p * 4, 44 - p * 4, 3 + Math.floor(p / 3)); }
+    fillCircle(26, 44, 3, 1); fillCircle(102, 44, 3, 1);
+  },
+
+  kafasikarisik(f) {
+    fillCircle(EYE_LX, EYE_Y, 9, 1); fillCircle(EYE_LX + 2, EYE_Y + 1, 3, 0);
+    fillCircle(EYE_RX, EYE_Y + 2, 6, 1); fillCircle(EYE_RX - 2, EYE_Y + 3, 2, 0);
+    line(56, 48, 62, 44, 1); line(62, 44, 70, 48, 1); line(70, 48, 74, 46, 1);
+    if ((f % 6) < 4) bigText(104, 2, '?');
+  },
+
+  bozulmus(f) {
+    fillRect(EYE_LX - 9, EYE_Y - 6, 18, 5, 1);
+    fillRect(EYE_LX - 9 + ((f % 3) - 1) * 3, EYE_Y + 1, 12, 5, 1);
+    fillRect(EYE_RX - 9, EYE_Y - 6, 18, 5, 1);
+    fillRect(EYE_RX - 9 + (f % 2) * 4, EYE_Y + 1, 12, 5, 1);
+    line(50, 46, 60, 42, 1); line(62, 48, 72, 44, 1); line(74, 50, 80, 45, 1);
+    for (let i = 0; i < 70; i++) {
+      px((i * 37 + f * 53) % W, (i * 61 + f * 17) % H, 1);
+    }
+    for (let b = 0; b < 3; b++) {
+      const y = (f * 9 + b * 21) % H;
+      const w = 20 + ((f * 13 + b * 31) % 80);
+      const x = (f * 7 + b * 41) % (W - w);
+      fillRect(x, y, w, 2, 1);
+    }
+    if (f % 5 === 0) {
+      fillRect(0, 0, W, H, 1);
+      fillRect(30, 16, 68, 22, 0);
+      bigText(34, 20, 'ERROR');
+    }
+  }
+};
+
+const INFO = {
+  mutlu: 'Sakin, gülümseyen, ara sıra göz kırpan',
+  huzunlu: 'Gözleri dolu, yaş süzülen üzgün yüz',
+  duygusuz: 'Düz bakış, tepkisiz (robotik mod)',
+  ofkeli: 'Çatık kaşlı, titreyen agresif yüz',
+  sasirmis: 'Küçük gözbebekleri, kocaman "O" ağız',
+  uykulu: 'Ağırlaşan kapaklar, esneyen yüz',
+  derinuyku: 'Kapalı gözler, büyüyüp küçülen Zzz',
+  sevecen: 'Kalp gözler, pır pır aşık ifade',
+  gozkirpan: 'Tek göz kırpan, sırıtan çapkın yüz',
+  utanmis: 'Yanaklarda kızarma, kaçan bakış',
+  sikilmis: 'Göz deviren, şişen yanaklı oflama',
+  heyecanli: 'Yıldız gözler, zıplayan coşku',
+  korkmus: 'Titreyen, minicik gözbebekleri',
+  yorgun: 'Göz altı torbaları, bitkin nefes',
+  havali: 'Yukarıdan inen piksel güneş gözlüğü',
+  odaklanmis: 'Ter bandı, dikkatli bakış (Pomodoro)',
+  muzik: 'Kulaklık + ritme göre sallanan kafa',
+  supheci: 'Tek kaş havada, kısık sorgulayıcı bakış',
+  acikmis: 'Dil dışarı, yalayan açgözlü ifade',
+  kutlama: 'Parti şapkası + konfeti patlaması',
+  basdonmesi: 'Dönen spiral gözler, sersem ifade',
+  sarj: 'Şimşek gözler + dolan enerji barı',
+  opucuk: 'Göz kırpıp kalp fırlatan sevimli yüz',
+  kafasikarisik: 'Asimetrik gözler + yanıp sönen "?"',
+  bozulmus: 'Karlı ekran, kısa devre glitch'
+};
+
+// ============================================================
+//  Kartları oluştur ve animasyonu çalıştır
+// ============================================================
+const SCALE = 4;
+const grid = document.getElementById('grid');
+const cards = [];
+
+// metin yardimcisi (drawChar5x7 tabanli)
+function textYaz(x, y, str) { text(x, y, str, 1); }
+
+const TUM_YUZLER = Object.assign({}, FACES, TEPKILER);
+
+for (const [name, fn] of Object.entries(TUM_YUZLER)) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  const title = document.createElement('div');
+  title.className = 'name';
+  title.textContent = name.toUpperCase();
+  const desc = document.createElement('div');
+  desc.className = 'desc';
+  desc.textContent = INFO[name] || 'Dokunuş tepkisi';
+  card.append(cv, title, desc);
+  grid.appendChild(card);
+  cards.push({ fn, ctx, img });
+}
+
+let frame = 0;
+function tick() {
+  for (const c of cards) {
+    buf.fill(0);
+    c.fn(frame);
+    const d = c.img.data;
+    for (let i = 0; i < W * H; i++) {
+      const on = buf[i];
+      d[i * 4] = on ? 0xE8 : 0x0A;
+      d[i * 4 + 1] = on ? 0xF5 : 0x0C;
+      d[i * 4 + 2] = on ? 0xFF : 0x14;
+      d[i * 4 + 3] = 255;
+    }
+    c.ctx.putImageData(c.img, 0, 0);
+  }
+  frame++;
+  setTimeout(tick, 120);
+}
+tick();
+</script>
+</body>
+</html>
